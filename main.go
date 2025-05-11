@@ -130,32 +130,43 @@ func saveHTML(filename string, data []byte) error {
 	return nil
 }
 
-func preview(filename string) error {
-	cName := ""
-	cParams := []string{}
+// preview opens the given file in the user’s default viewer/browser,
+// based on the host operating system.
+// It locates the appropriate open command, runs it, and waits briefly
+// to ensure the viewer has time to launch.
+func preview(filePath string) error {
+	// Select the appropriate command and initial arguments per OS
+	var cmdName string
+	var cmdArgs []string
 
 	switch runtime.GOOS {
 	case "linux":
-		cName = "xdg-open"
+		cmdName = "xdg-open"
 	case "windows":
-		cName = "cmd.exe"
-		cParams = []string{"/C", "start"}
+		cmdName = "cmd.exe"
+		cmdArgs = []string{"/C", "start"}
 	case "darwin":
-		cName = "open"
+		cmdName = "open"
 	default:
-		return fmt.Errorf("unsupported OS %q", runtime.GOOS)
+		return fmt.Errorf("unsupported OS: %q", runtime.GOOS)
 	}
 
-	cParams = append(cParams, filename)
-	cPath, err := exec.LookPath(cName)
+	// Append the file to open
+	cmdArgs = append(cmdArgs, filePath)
+
+	// Resolve the full path to the executable
+	exePath, err := exec.LookPath(cmdName)
 	if err != nil {
-		return fmt.Errorf("looking up command %q: %w", cName, err)
+		return fmt.Errorf("executable %q not found: %w", cmdName, err)
 	}
 
-	if err := exec.Command(cPath, cParams...).Run(); err != nil {
-		return fmt.Errorf("running preview command: %w", err)
+	// Execute the command
+	cmd := exec.Command(exePath, cmdArgs...)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("running %q with args %v: %w", cmdName, cmdArgs, err)
 	}
 
+	// Allow viewer time to start
 	time.Sleep(2 * time.Second)
 
 	return nil

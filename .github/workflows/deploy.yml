@@ -1,0 +1,40 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main  # Set this to your default branch
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'  # Specify your desired Go version
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v
+
+      - name: Build site
+        run: go run main.go -file README.md -t template-fmt.html.tmpl -s
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: ./_site  # Replace with your build output directory
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v2
