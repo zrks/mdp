@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'  # Specify your desired Go version
+          go-version: '1.24'
 
       - name: Install dependencies
         run: go mod download
@@ -34,7 +34,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./_site  # Replace with your build output directory
+          path: ./index.html
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
