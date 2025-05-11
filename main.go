@@ -43,35 +43,44 @@ func main() {
 
 }
 
-func run(filename string, writer io.Writer, skipPreview bool, templateFile string) error {
-	input, err := os.ReadFile(filename)
+// run reads the Markdown file at filename, renders it using templateFile,
+// writes the result to index.html in the same directory, prints the output
+// path to w, and optionally invokes a preview command.
+func run(filename string, w io.Writer, skipPreview bool, templateFile string) error {
+	// Read source Markdown
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		return fmt.Errorf("reading markdown %q: %w", filename, err)
 	}
 
-	htmlData, err := parseContent(input, templateFile)
+	// Render HTML from template
+	html, err := parseContent(data, templateFile)
 	if err != nil {
-		return fmt.Errorf("rendering content from %q: %w", templateFile, err)
+		return fmt.Errorf("rendering content from template %q: %w", templateFile, err)
 	}
 
-	// Save output as index.html next to the source file
-	dir := filepath.Dir(filename)
-	outName := filepath.Join(dir, "index.html")
+	// Determine output path: same dir as source, named index.html
+	outDir := filepath.Dir(filename)
+	outPath := filepath.Join(outDir, "index.html")
 
-	fmt.Fprintln(writer, outName)
+	// Inform caller where file will be written
+	fmt.Fprintln(w, outPath)
 
-	err = saveHTML(outName, htmlData)
-	if err != nil {
-		return fmt.Errorf("saving HTML to %q: %w", outName, err)
+	// Write out HTML file
+	if err := saveHTML(outPath, html); err != nil {
+		return fmt.Errorf("writing HTML to %q: %w", outPath, err)
 	}
 
+	// Skip preview if requested
 	if skipPreview {
 		return nil
 	}
 
-	if err := preview(outName); err != nil {
-		return fmt.Errorf("preview command failed: %w", err)
+	// Preview the generated file
+	if err := preview(outPath); err != nil {
+		return fmt.Errorf("preview failed for %q: %w", outPath, err)
 	}
+
 	return nil
 }
 
