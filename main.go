@@ -84,30 +84,43 @@ func run(filename string, w io.Writer, skipPreview bool, templateFile string) er
 	return nil
 }
 
-func parseContent(input []byte, templateFileName string) ([]byte, error) {
-	output := blackfriday.Run(input)
-	body := bluemonday.UGCPolicy().SanitizeBytes(output)
-	htmlTemplate, err := template.New("mdp").Parse(defaultTemplate)
+// parseContent converts the given Markdown input into sanitized HTML by applying
+// either the built-in defaultTemplate or an optional external template file.
+// It returns the rendered HTML bytes or an error.
+func parseContent(markdown []byte, templateFileName string) ([]byte, error) {
+	// 1. Convert Markdown → HTML
+	rendered := blackfriday.Run(markdown)
+
+	// 2. Sanitize HTML for safe output
+	sanitized := bluemonday.UGCPolicy().SanitizeBytes(rendered)
+
+	// 3. Load the base template
+	tmpl, err := template.New("mdp").Parse(defaultTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("parsing default template: %w", err)
 	}
+
+	// 4. If a custom template is provided, override the base template
 	if templateFileName != "" {
-		htmlTemplate, err = template.ParseFiles(templateFileName)
+		tmpl, err = template.ParseFiles(templateFileName)
 		if err != nil {
 			return nil, fmt.Errorf("parsing template file %q: %w", templateFileName, err)
 		}
 	}
 
-	templateContent := content{
-		Title: "zrks",
-		Body:  template.HTML(body),
+	// 5. Prepare data for the template
+	data := content{
+		Title: "zrks", // adjust as appropriate
+		Body:  template.HTML(sanitized),
 	}
 
-	var buffer bytes.Buffer
-	if err := htmlTemplate.Execute(&buffer, templateContent); err != nil {
+	// 6. Execute the template into a buffer
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
 		return nil, fmt.Errorf("executing template: %w", err)
 	}
-	return buffer.Bytes(), nil
+
+	return buf.Bytes(), nil
 }
 
 func saveHTML(filename string, data []byte) error {
