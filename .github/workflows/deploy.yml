@@ -31,10 +31,15 @@ jobs:
       - name: Build site
         run: go run main.go -file README.md -t template-fmt.html.tmpl -s
 
+      - name: move artifacts
+        run: |
+          mkdir -p out
+          mv index.html out/index.html
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./index.html
+          path: ./out/index.html
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
