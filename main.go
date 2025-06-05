@@ -10,11 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"time"
-
-	"github.com/microcosm-cc/bluemonday"
-	"github.com/russross/blackfriday/v2"
 )
 
 const (
@@ -84,15 +82,131 @@ func run(filename string, w io.Writer, skipPreview bool, templateFile string) er
 	return nil
 }
 
+// markdownToHTML converts basic Markdown to HTML
+func markdownToHTML(markdown []byte) []byte {
+	// Convert line endings to \n
+	content := bytes.ReplaceAll(markdown, []byte("\r\n"), []byte("\n"))
+	content = bytes.ReplaceAll(content, []byte("\r"), []byte("\n"))
+
+	// Split into lines
+	lines := bytes.Split(content, []byte("\n"))
+	var result []byte
+	var inCodeBlock bool
+	var inList bool
+
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+
+		// Handle code blocks
+		if bytes.HasPrefix(line, []byte("```")) {
+			if inCodeBlock {
+				result = append(result, []byte("</pre></code>\n")...)
+			} else {
+				result = append(result, []byte("<pre><code>")...)
+			}
+			inCodeBlock = !inCodeBlock
+			continue
+		}
+
+		if inCodeBlock {
+			result = append(result, line...)
+			result = append(result, '\n')
+			continue
+		}
+
+		// Handle headers
+		if bytes.HasPrefix(line, []byte("# ")) {
+			result = append(result, []byte("<h1>")...)
+			result = append(result, line[2:]...)
+			result = append(result, []byte("</h1>\n")...)
+			continue
+		}
+
+		// Handle lists
+		if bytes.HasPrefix(line, []byte("- ")) {
+			if !inList {
+				result = append(result, []byte("<ul>\n")...)
+				inList = true
+			}
+			result = append(result, []byte("<li>")...)
+			result = append(result, line[2:]...)
+			result = append(result, []byte("</li>\n")...)
+			continue
+		} else if inList {
+			result = append(result, []byte("</ul>\n")...)
+			inList = false
+		}
+
+		// Handle paragraphs
+		if len(line) > 0 {
+			result = append(result, []byte("<p>")...)
+			result = append(result, line...)
+			result = append(result, []byte("</p>\n")...)
+		} else {
+			result = append(result, '\n')
+		}
+	}
+
+	if inList {
+		result = append(result, []byte("</ul>\n")...)
+	}
+
+	return result
+}
+
+// sanitizeHTML removes potentially dangerous HTML elements and attributes
+func sanitizeHTML(html []byte) []byte {
+	// Convert to string for easier manipulation
+	content := string(html)
+
+	// Remove script tags and their contents
+	scriptRegex := regexp.MustCompile(`<script[^>]*>.*?</script>`)
+	content = scriptRegex.ReplaceAllString(content, "")
+
+	// Remove event handlers
+	eventRegex := regexp.MustCompile(`\s(on\w+)="[^"]*"`)
+	content = eventRegex.ReplaceAllString(content, "")
+
+	// Remove javascript: URLs
+	jsUrlRegex := regexp.MustCompile(`javascript:[^"'\s]*`)
+	content = jsUrlRegex.ReplaceAllString(content, "")
+
+	// Remove style attributes
+	styleRegex := regexp.MustCompile(`\sstyle="[^"]*"`)
+	content = styleRegex.ReplaceAllString(content, "")
+
+	// Remove iframe tags
+	iframeRegex := regexp.MustCompile(`<iframe[^>]*>.*?</iframe>`)
+	content = iframeRegex.ReplaceAllString(content, "")
+
+	// Remove object tags
+	objectRegex := regexp.MustCompile(`<object[^>]*>.*?</object>`)
+	content = objectRegex.ReplaceAllString(content, "")
+
+	// Remove embed tags
+	embedRegex := regexp.MustCompile(`<embed[^>]*>`)
+	content = embedRegex.ReplaceAllString(content, "")
+
+	// Remove base tags
+	baseRegex := regexp.MustCompile(`<base[^>]*>`)
+	content = baseRegex.ReplaceAllString(content, "")
+
+	// Remove meta refresh
+	metaRefreshRegex := regexp.MustCompile(`<meta[^>]*http-equiv=["']refresh["'][^>]*>`)
+	content = metaRefreshRegex.ReplaceAllString(content, "")
+
+	return []byte(content)
+}
+
 // parseContent converts the given Markdown input into sanitized HTML by applying
 // either the built-in defaultTemplate or an optional external template file.
 // It returns the rendered HTML bytes or an error.
 func parseContent(markdown []byte, templateFileName string) ([]byte, error) {
 	// 1. Convert Markdown → HTML
-	rendered := blackfriday.Run(markdown)
+	rendered := markdownToHTML(markdown)
 
 	// 2. Sanitize HTML for safe output
-	sanitized := bluemonday.UGCPolicy().SanitizeBytes(rendered)
+	sanitized := sanitizeHTML(rendered)
 
 	// 3. Load the base template
 	tmpl, err := template.New("mdp").Parse(defaultTemplate)
@@ -130,7 +244,7 @@ func saveHTML(filename string, data []byte) error {
 	return nil
 }
 
-// preview opens the given file in the user’s default viewer/browser,
+// preview opens the given file in the user's default viewer/browser,
 // based on the host operating system.
 // It locates the appropriate open command, runs it, and waits briefly
 // to ensure the viewer has time to launch.
