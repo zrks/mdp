@@ -100,7 +100,7 @@ func markdownToHTML(markdown []byte) []byte {
 		// Handle code blocks
 		if bytes.HasPrefix(line, []byte("```")) {
 			if inCodeBlock {
-				result = append(result, []byte("</pre></code>\n")...)
+				result = append(result, []byte("</code></pre>\n")...)
 			} else {
 				result = append(result, []byte("<pre><code>")...)
 			}
@@ -121,15 +121,23 @@ func markdownToHTML(markdown []byte) []byte {
 			result = append(result, []byte("</h1>\n")...)
 			continue
 		}
+		if bytes.HasPrefix(line, []byte("## ")) {
+			result = append(result, []byte("<h2>")...)
+			result = append(result, line[3:]...)
+			result = append(result, []byte("</h2>\n")...)
+			continue
+		}
 
 		// Handle lists
-		if bytes.HasPrefix(line, []byte("- ")) {
+		if bytes.HasPrefix(line, []byte("* ")) {
 			if !inList {
 				result = append(result, []byte("<ul>\n")...)
 				inList = true
 			}
 			result = append(result, []byte("<li>")...)
-			result = append(result, line[2:]...)
+			// Process links within list items
+			line = processLinks(line[2:])
+			result = append(result, line...)
 			result = append(result, []byte("</li>\n")...)
 			continue
 		} else if inList {
@@ -140,6 +148,8 @@ func markdownToHTML(markdown []byte) []byte {
 		// Handle paragraphs
 		if len(line) > 0 {
 			result = append(result, []byte("<p>")...)
+			// Process links within paragraphs
+			line = processLinks(line)
 			result = append(result, line...)
 			result = append(result, []byte("</p>\n")...)
 		} else {
@@ -152,6 +162,12 @@ func markdownToHTML(markdown []byte) []byte {
 	}
 
 	return result
+}
+
+// processLinks converts markdown links [text](url) to HTML links
+func processLinks(line []byte) []byte {
+	linkRegex := regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
+	return linkRegex.ReplaceAll(line, []byte(`<a href="$2" rel="nofollow">$1</a>`))
 }
 
 // sanitizeHTML removes potentially dangerous HTML elements and attributes
